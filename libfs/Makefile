@@ -1,6 +1,6 @@
 # Target library
 lib := libfs.a
-objs := disk.o fs.objs
+objs := disk.o fs.o
 
 CC := gcc
 CFLAGS := -Wall -Werror
@@ -18,4 +18,4 @@ $(lib): $(objs)
 	$(CC) $(CFLAGS) -c -o $@ $< $(DEPFLAGS)	
 
 clean:
-	rm $(lib) $(del_objs) $(deps)
+	rm $(lib) $(objs) $(deps)
