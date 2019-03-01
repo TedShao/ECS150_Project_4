@@ -81,15 +81,25 @@ int fs_mount(const char *diskname)
 
 int fs_umount(void)
 {
-	// TODO: might need to modify to write meta data before closing disk
-
 	// TODO: check for open file descriptors
 
+	/* Write out the metadata */
+	if (block_write(0, superblock) == -1)
+		return -1;
+	if (block_write((superblock->data_blk-1), rdir) == -1)
+		return -1;
+	for (int i = 0; i < superblock->fat_blk_count; i++) {
+		block_write(1 + i, fat + (i * BLOCK_SIZE));
+	}
+
+	/* Close the Disk */
 	if (block_disk_close() == -1)
 		return -1;
 
+	/* Free metadata structures */
 	free(superblock);
 	free(rdir);
+	free(fat);
 	return 0;
 }
 
