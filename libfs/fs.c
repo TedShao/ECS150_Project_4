@@ -40,6 +40,33 @@ file_t rdir;
 uint16_t *fat;
 
 /* Internal Functions */
+int valid_filename(const char *filename) 
+{
+	int valid_name = 0;
+
+	for (int i = 0; i < FS_FILENAME_LEN; i++) {
+		if (filename[i] == '\0') {
+			valid_name = 1;
+			break;
+		}
+	}
+
+	return valid_name;
+}
+
+/* Returns -1 if fat is full, modifies parameter to be next avaialbe fat index */
+int fat_find_free(int *index) 
+{
+	for (int i = 0; i < superblock->data_blk_count; i++) {
+		if (fat[i] == 0) {
+			*index = i;
+			return 0;
+		}
+	}
+	
+	/* if no empty fat entry found */
+	return -1;
+}
 
 /* API Functions */
 int fs_mount(const char *diskname)
@@ -139,7 +166,7 @@ int fs_info(void)
 
 	/* rdir_free_ratio=x/128 */
 	for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
-		if (rdir[i].size > 0) {
+		if (rdir[i].name[0] != '\0') {
 			file_count++;
 		}
 	}
@@ -150,8 +177,38 @@ int fs_info(void)
 
 int fs_create(const char *filename)
 {
-	/* TODO: Phase 2 */
+	int empty_index = -1;
+	int fat_index = 0;
 
+	/* Valid name check */
+	if (!valid_filename(filename))
+		return -1;
+
+	/*
+	 * - Checks if filename already exists
+	 * - Finds a free entry index if it exists
+	 */
+	for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+		if (strcmp((char*)rdir[i].name,filename) == 0)
+			return -1;
+		if (rdir[i].name[0] == '\0' && empty_index == -1)
+			empty_index = i;
+	}
+
+	/* Check if maximum files created */
+	if (empty_index == -1)
+		return -1;
+
+	/* Check for full disk */
+	if (fat_find_free(&fat_index) == -1)
+		return -1;
+
+	/* Create a new file */
+	memset(&(rdir[empty_index]),0,BLOCK_SIZE/FS_FILE_MAX_COUNT);
+	strcpy((char*)rdir[empty_index].name,filename);
+	rdir[empty_index].start_index = fat_index;
+	fat[fat_index] = FAT_EOC;
+	
 	return 0;
 }
 
