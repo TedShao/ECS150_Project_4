@@ -37,7 +37,9 @@ typedef struct __attribute__((__packed__)) file {
 /* Global Variables */
 superblock_t superblock;
 file_t rdir;
+file_t open_files;
 uint16_t *fat;
+
 
 /* Internal Functions */
 int valid_filename(const char *filename) 
@@ -102,6 +104,10 @@ int fs_mount(const char *diskname)
 	for (int i = 0; i < superblock->fat_blk_count; i++) {
 		block_read(1 + i, fat + (i * BLOCK_SIZE));
 	}
+
+	/* Clear Open File Array */
+	open_files = (file_t) malloc(sizeof(struct file)*FS_OPEN_MAX_COUNT);
+	memset(open_files,0,sizeof(struct file) * FS_OPEN_MAX_COUNT);
 
 	return 0;
 }
@@ -214,7 +220,14 @@ int fs_create(const char *filename)
 
 int fs_delete(const char *filename)
 {
-	/* TODO: Phase 2 */
+	int file_index = -1;
+	int fat_index = 0;
+
+	/* Valid name check */
+	if (!valid_filename(filename))
+		return -1;
+
+
 
 	return 0;
 }
