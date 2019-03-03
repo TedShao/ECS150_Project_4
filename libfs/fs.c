@@ -34,11 +34,17 @@ typedef struct __attribute__((__packed__)) file {
 	uint8_t padding[ROOT_DIR_ENTRY_PADDING];
 } *file_t;
 
+typedef struct open_file {
+	file_t file;
+	uint32_t offset;
+} open_file_t;
+
 /* Global Variables */
 superblock_t superblock;
 file_t rdir;
-file_t open_files;
+open_file_t open_files[FS_OPEN_MAX_COUNT];
 uint16_t *fat;
+uint8_t open_file_count;
 
 
 /* Internal Functions */
@@ -56,7 +62,21 @@ int valid_filename(const char *filename)
 	return valid_name;
 }
 
-/* Returns -1 if fat is full, modifies parameter to be next avaialbe fat index */
+/* Check if fd is valid */
+int valid_fd(int fd)
+{
+	/* Check if fd is in bounds */
+	if (fd < 0 || fd >= FS_FILE_MAX_COUNT) 
+		return 0;
+
+	/* Check if fd is valid */
+	if (open_files[fd].file == NULL)
+		return 0;
+
+	return 1;
+}
+
+/* Returns -1 if fat is full, modifies parameter to be next available fat index */
 int fat_find_free(int *index) 
 {
 	for (int i = 0; i < superblock->data_blk_count; i++) {
@@ -68,6 +88,36 @@ int fat_find_free(int *index)
 	
 	/* if no empty fat entry found */
 	return -1;
+}
+
+/* Returns the index of open_files with file of filename, returns -1 if
+not found */
+int open_find_file(char *filename) 
+{
+	for (int i = 0; i < FS_OPEN_MAX_COUNT; i++) {
+		if (open_files[i].file != NULL ) {
+			if (strcmp((char*)open_files[i].file->name,filename) == 0)
+				return i;
+		} else if (strcmp(filename,"") == 0) {
+			return i;
+		}
+	}
+	
+	/* if no filed of filename match is opened */
+	return -1;
+}
+
+/* Returns the index of the root directory with file of filename, returns -1 if
+not found */
+int rdir_find_file(char *filename) {
+	int index = -1;
+	for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+		if (strcmp((char*)rdir[i].name,filename) == 0) {
+			index = i;
+			break;
+		}
+	}
+	return index;
 }
 
 /* API Functions */
@@ -106,15 +156,17 @@ int fs_mount(const char *diskname)
 	}
 
 	/* Clear Open File Array */
-	open_files = (file_t) malloc(sizeof(struct file)*FS_OPEN_MAX_COUNT);
-	memset(open_files,0,sizeof(struct file) * FS_OPEN_MAX_COUNT);
+	memset(open_files,0, sizeof(open_file_t) * FS_OPEN_MAX_COUNT);
+	open_file_count = 0;
 
 	return 0;
 }
 
 int fs_umount(void)
 {
-	// TODO: check for open file descriptors
+	/* Check for open files */
+	if (open_file_count != 0) 
+		return -1;
 
 	/* Write out the metadata */
 	if (block_write(0, superblock) == -1)
@@ -220,49 +272,120 @@ int fs_create(const char *filename)
 
 int fs_delete(const char *filename)
 {
-	int file_index = -1;
-	int fat_index = 0;
+	int del_index = -1;
+	uint16_t del_block = 0;
 
 	/* Valid name check */
 	if (!valid_filename(filename))
 		return -1;
 
+	/* Check if file is open */
+	if (open_find_file(filename) != -1)
+		return -1;
 
+	/* Check if file exists and find index*/
+	del_index = rdir_find_file(filename);
+	if (del_index == -1)
+		return -1;
+
+	/* Delete the file */
+	del_block = rdir[del_index].start_index;
+	while (del_block != FAT_EOC) {
+		uint16_t temp_block = fat[del_block];
+		fat[del_block] = 0;
+		del_block = temp_block;
+	}
+	memset(&(rdir[del_index]),0,BLOCK_SIZE/FS_FILE_MAX_COUNT);
 
 	return 0;
 }
 
 int fs_ls(void)
 {
-	/* TODO: Phase 2 */
+	if(block_disk_count() == -1)
+		return -1;
+
+	/* FS Ls: */
+	printf("FS Ls:\n");
+
+	/* Iterate though rdir and print file w/ info */
+	for ( int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+		if (rdir[i].name[0] != 0) {
+			/* file: */
+			printf("file: %s, ", (char*)rdir[i].name);
+			/* size: */
+			printf("size: %u, ", rdir[i].size);
+			/* data_blk: */
+			printf("data_blk: %u\n", rdir[i].start_index);
+		}
+	}
 
 	return 0;
 }
 
 int fs_open(const char *filename)
 {
-	/* TODO: Phase 3 */
+	int open_index = -1;
+	int rdir_index = -1;
 
-	return 0;
+	/* Check number of open files */
+	if (open_file_count == FS_OPEN_MAX_COUNT) 
+		return -1;
+
+	/* Valid name check */
+	if (!valid_filename(filename))
+		return -1;
+
+	/* Check if file exists */
+	rdir_index = rdir_find_file(filename);
+	if (rdir_index == -1)
+		return -1;
+
+	/* Find first empty spot in open_files */
+	open_index = open_find_file("");
+	open_files[open_index].file = &(rdir[rdir_index]);
+	open_files[open_index].offset = 0;
+	
+	/* Increment open file count */
+	open_file_count++;
+
+	return open_index;
 }
 
 int fs_close(int fd)
 {
-	/* TODO: Phase 3 */
+	/* Check if fd is valid */
+	if (!valid_fd(fd)) 
+		return -1;
+
+	/* Close file */
+	memset(&open_files[fd],0,sizeof(open_file_t));
 
 	return 0;
 }
 
 int fs_stat(int fd)
 {
-	/* TODO: Phase 3 */
+	/* Check if fd is valid */
+	if (!valid_fd(fd)) 
+		return -1;
 
-	return 0;
+	/* Return size of file */
+	return open_files[fd].file->size;
 }
 
 int fs_lseek(int fd, size_t offset)
 {
-	/* TODO: Phase 3 */
+	/* Check if fd is valid */
+	if (!valid_fd(fd)) 
+		return -1;
+
+	/* Check if offset is within bounds of file */
+	if (offset < 0 || offset >= open_files[fd].file->size)
+		return -1;
+
+	/* Set open file offest */
+	open_files[fd].offset = offset;
 
 	return 0;
 }
