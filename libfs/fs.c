@@ -92,7 +92,7 @@ int fat_find_free(int *index)
 
 /* Returns the index of open_files with file of filename, returns -1 if
 not found */
-int open_find_file(char *filename) 
+int open_find_file(const char *filename) 
 {
 	for (int i = 0; i < FS_OPEN_MAX_COUNT; i++) {
 		if (open_files[i].file != NULL ) {
@@ -109,7 +109,7 @@ int open_find_file(char *filename)
 
 /* Returns the index of the root directory with file of filename, returns -1 if
 not found */
-int rdir_find_file(char *filename) {
+int rdir_find_file(const char *filename) {
 	int index = -1;
 	for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
 		if (strcmp((char*)rdir[i].name,filename) == 0) {
