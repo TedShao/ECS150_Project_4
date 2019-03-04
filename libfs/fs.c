@@ -48,6 +48,7 @@ uint8_t open_file_count;
 
 
 /* Internal Functions */
+/* Check if valid filename (null terminated and <16) */
 int valid_filename(const char *filename) 
 {
 	int valid_name = 0;
@@ -76,18 +77,43 @@ int valid_fd(int fd)
 	return 1;
 }
 
-/* Returns -1 if fat is full, modifies parameter to be next available fat index */
-int fat_find_free(int *index) 
+/* Returns -1 if fat is full, otherwise returns first free fat starting at
+start_index */
+int fat_find_free(int start_index) 
 {
-	for (int i = 0; i < superblock->data_blk_count; i++) {
+	for (int i = (start_index + 1); i < superblock->data_blk_count; i++) {
 		if (fat[i] == 0) {
-			*index = i;
-			return 0;
+			return i;
 		}
 	}
 	
 	/* if no empty fat entry found */
-	return -1;
+	return FAT_EOC;
+}
+
+/* Returns the fat index of the open_file with offset, returns 0 if offset = size*/
+int fat_find_index(open_file_t open_file) 
+{
+	int fat_offset = open_file.offset / BLOCK_SIZE;
+	int fat_index = open_file.file->start_index;
+
+	for (int i = 0; i < fat_offset; i++) {
+		fat_index = fat[fat_index];
+	}
+
+	return fat_index;
+}
+
+/* Wrapper reading function to add data block start offset */
+int data_block_read(size_t block, void *buf)
+{
+	return block_read(block + superblock->data_blk, buf);
+}
+
+/* Wrapper writing function to add data block start offset */
+int data_block_write(size_t block, void *buf)
+{
+	return block_write(block + superblock->data_blk, buf);
 }
 
 /* Returns the index of open_files with file of filename, returns -1 if
@@ -120,7 +146,30 @@ int rdir_find_file(const char *filename) {
 	return index;
 }
 
-/* API Functions */
+/* Resize block allocation to allow file to contain size bytes and returns the
+actual resize value if disk is full and not able resize to size*/
+int file_resize(open_file_t open_file, int size)
+{
+	int fat_index = open_file.file->start_index;
+	int blk_count = size / BLOCK_SIZE + 1;
+
+	for (int i = 0; i < blk_count; i++) {
+		if (fat[fat_index] == FAT_EOC || fat[fat_index] == 0) {
+			fat[fat_index] = fat_find_free(fat_index);
+			if (fat[fat_index] == FAT_EOC) {
+				open_file.file->size = (i+1) * BLOCK_SIZE;
+				return ((i+1) * BLOCK_SIZE);
+			}
+		}
+		fat_index = fat[fat_index];
+	}
+
+	fat[fat_index] = FAT_EOC;
+	open_file.file->size = size;
+	return size;
+}
+
+/***** API Functions *****/
 int fs_mount(const char *diskname)
 {
 	char sig_check[ECS150FS_SIG_SIZE + 1];
@@ -258,7 +307,8 @@ int fs_create(const char *filename)
 		return -1;
 
 	/* Check for full disk */
-	if (fat_find_free(&fat_index) == -1)
+	fat_index = fat_find_free(0);
+	if (fat_index == FAT_EOC)
 		return -1;
 
 	/* Create a new file */
@@ -361,6 +411,7 @@ int fs_close(int fd)
 	/* Close file */
 	memset(&open_files[fd],0,sizeof(open_file_t));
 
+	open_file_count--;
 	return 0;
 }
 
@@ -392,15 +443,101 @@ int fs_lseek(int fd, size_t offset)
 
 int fs_write(int fd, void *buf, size_t count)
 {
-	/* TODO: Phase 4 */
+	char *blk_buf;
+	char *buf_copy;
+	size_t blk_count;
+	size_t blk_index;
+	size_t byte_count;
+	size_t byte_rem;
+	size_t byte_offset;
+	open_file_t write_file;
 
-	return 0;
+	/* Check if fd is valid */
+	if (!valid_fd(fd)) 
+		return -1;
+
+	/* Setup blk writing variables */
+	buf_copy = (char*) buf;
+	write_file = open_files[fd];
+	byte_count = count;
+	blk_index = fat_find_index(write_file);
+
+	/* Check if file needs to be extended */
+	int actual_resize = file_resize(write_file, byte_count + write_file.offset);
+	byte_count = actual_resize - write_file.offset;
+
+	/* Setup variables */
+	blk_count = byte_count / BLOCK_SIZE + 1;
+	byte_offset = write_file.offset % BLOCK_SIZE;
+	blk_buf = (char*) malloc(sizeof(char) * BLOCK_SIZE);
+
+	/* Read first block and modify at offset */
+	data_block_read(blk_index, blk_buf);
+	memcpy((blk_buf + byte_offset), buf_copy, (BLOCK_SIZE - byte_offset));
+	data_block_write(blk_index, blk_buf);
+
+	/* Write to full data blocks from (1 to blk_count - 1) */
+	buf_copy += (BLOCK_SIZE - byte_offset);
+	blk_index = fat[blk_index];
+	for (int i = 1; i < (blk_count-1); i++) {
+		data_block_write(blk_index, buf_copy);
+		buf_copy += BLOCK_SIZE;
+		blk_index = fat[blk_index];
+	}
+
+	/* Write to last block */
+	if (blk_index != FAT_EOC) {
+		byte_rem = (byte_count + write_file.offset) % BLOCK_SIZE;
+		data_block_read(blk_index, blk_buf);
+		memcpy(blk_buf, buf_copy, byte_rem);
+		data_block_write(blk_index, blk_buf);
+	}
+
+	/* Modify offset */
+	write_file.offset += byte_count;
+
+	return byte_count;
 }
 
 int fs_read(int fd, void *buf, size_t count)
 {
-	/* TODO: Phase 4 */
+	char *blk_buf;
+	size_t blk_count;
+	size_t blk_index;
+	size_t byte_count;
+	size_t byte_rem;
+	size_t byte_offset;
+	open_file_t read_file;
 
-	return 0;
+	/* Check if fd is valid */
+	if (!valid_fd(fd)) 
+		return -1;
+
+	/* Setup blk reading variables */
+	read_file = open_files[fd];
+	byte_rem = read_file.file->size - read_file.offset;	
+	byte_count = (byte_rem < count) ? byte_rem : count;			
+	blk_count = byte_count / BLOCK_SIZE + 1;
+	blk_index = fat_find_index(read_file);
+
+	/* Check if offset has reached end of file, zero bytes are read */
+	if (blk_index == 0) 
+		return 0;
+
+	/* Allocated block buffer and fill with disk data */
+	blk_buf = (char*) malloc(sizeof(char) * BLOCK_SIZE * blk_count);
+	for (int i = 0; i < blk_count; i++) {
+		data_block_read(blk_index, blk_buf + (BLOCK_SIZE*i));
+		blk_index = fat[blk_index];
+	}
+
+	/* Copy needed data from blk_buf */
+	byte_offset = read_file.offset % BLOCK_SIZE;
+	memcpy(buf, (blk_buf + byte_offset), byte_count);
+
+	/* Modify offset */
+	read_file.offset += byte_count;
+
+	return byte_count;
 }
 
