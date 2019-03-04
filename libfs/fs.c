@@ -78,7 +78,7 @@ int valid_fd(int fd)
 }
 
 /* Returns -1 if fat is full, otherwise returns first free fat starting at
-start_index */
+start_index + 1 */
 int fat_find_free(int start_index) 
 {
 	for (int i = (start_index + 1); i < superblock->data_blk_count; i++) {
@@ -91,7 +91,7 @@ int fat_find_free(int start_index)
 	return FAT_EOC;
 }
 
-/* Returns the fat index of the open_file with offset, returns 0 if offset = size*/
+/* Returns the fat index of the open_file with offset*/
 int fat_find_index(open_file_t open_file) 
 {
 	int fat_offset = open_file.offset / BLOCK_SIZE;
@@ -463,6 +463,7 @@ int fs_write(int fd, void *buf, size_t count)
 	blk_index = fat_find_index(write_file);
 
 	/* Check if file needs to be extended */
+	// TODO: Should only resize if file is going to be larger // 
 	int actual_resize = file_resize(write_file, byte_count + write_file.offset);
 	byte_count = actual_resize - write_file.offset;
 
