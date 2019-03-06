@@ -293,7 +293,7 @@ int fs_create(const char *filename)
 
 	/*
 	 * - Checks if filename already exists
-	 * - Finds a free entry index if it exists
+	 * - Finds a free entry index if it doesn't exists
 	 */
 	for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
 		if (strcmp((char*)rdir[i].name,filename) == 0)
@@ -463,9 +463,10 @@ int fs_write(int fd, void *buf, size_t count)
 	blk_index = fat_find_index(write_file);
 
 	/* Check if file needs to be extended */
-	// TODO: Should only resize if file is going to be larger // 
-	int actual_resize = file_resize(write_file, byte_count + write_file.offset);
-	byte_count = actual_resize - write_file.offset;
+	if (byte_count + write_file.offset > write_file.file->size) {
+		int actual_resize = file_resize(write_file, byte_count + write_file.offset);
+		byte_count = actual_resize - write_file.offset;
+	}
 
 	/* Setup variables */
 	blk_count = byte_count / BLOCK_SIZE + 1;
