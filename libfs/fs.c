@@ -153,7 +153,7 @@ int file_resize(open_file_t open_file, int size)
 	int fat_index = open_file.file->start_index;
 	int blk_count = size / BLOCK_SIZE + 1;
 
-	for (int i = 0; i < blk_count; i++) {
+	for (int i = 1; i < blk_count; i++) {
 		if (fat[fat_index] == FAT_EOC || fat[fat_index] == 0) {
 			fat[fat_index] = fat_find_free(fat_index);
 			if (fat[fat_index] == FAT_EOC) {
