@@ -311,12 +311,13 @@ run_fs_create_multiple() {
 	run_tool ./fs_make.x test.fs 10
 	run_tool dd if=/dev/zero of=test-file-1 bs=10 count=1
 	run_tool dd if=/dev/zero of=test-file-2 bs=10 count=1
+    echo "hello" > test-file-1
 	run_tool timeout 2 ./test_fs.x add test.fs test-file-1
 	run_tool timeout 2 ./test_fs.x add test.fs test-file-2
 
 	run_test ./test_fs.x ls test.fs
 
-	rm -f test.fs test-file-1 test-file-2
+	rm -f test-file-1 test-file-2
 
 	local line_array=()
 	line_array+=("$(select_line "${STDOUT}" "2")")
@@ -327,6 +328,13 @@ run_fs_create_multiple() {
 
 	sub=0
 	compare_output_lines line_array[@] corr_array[@] "0.5"
+
+    run_tool ./test_fs.x stat test.fs test-file-1
+    run_tool ./test_fs.x cat test.fs test-file-1
+    run_tool ./test_fs.x stat test.fs test-file-2
+
+    rm -f test.fs
+
 	inc_total
 	add_answer "${sub}"
 }

@@ -148,6 +148,18 @@ open files array based on the file descriptor.
 
 # Testing
 
+For testing I copied test_fs.c and test_fs_student.sh and modified them into 
+mytest_fs.c and mytest_fs_student.sh. One of the first things I did was I
+changed all the calls of fs_ref.x to test_fs.x. This was so that we could test
+add and ls. In run_fs_info() I created a second file system to check mounting
+between two different file systems. At the end I error checked mounting and 
+unmounting without a valid file. Unmounting was from a custom function I made in
+mytest_fs.c. In run_fs_info_full() I tested mounting and then unmount the same
+file system by calling info twice and checking the values. I also tested adding
+into a larger file system. At the end the removed the files from the filesystem
+and checked if he fat and rdir ratios were correct. In run_fs_create_mutliple()
+I tested cat by echoing "hello" into one of the files and I tested stat.
+
 # References
 Used the following source for learning about packed structs:
 https://www.mikroe.com/blog/packed-structures-make-memory-feel-safe
