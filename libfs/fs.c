@@ -150,18 +150,19 @@ int rdir_find_file(const char *filename) {
 actual resize value if disk is full and not able resize to size*/
 int file_resize(open_file_t open_file, int size)
 {
-	int fat_index = open_file.file->start_index;
-	int blk_count = size / BLOCK_SIZE + 1;
+	int old_blk_count = open_file.file->size / BLOCK_SIZE;
+	int new_blk_count = size / BLOCK_SIZE;
+	int fat_index = open_file.file->start_index + old_blk_count;
 
-	for (int i = 1; i < blk_count; i++) {
-		if (fat[fat_index] == FAT_EOC || fat[fat_index] == 0) {
-			fat[fat_index] = fat_find_free(fat_index);
-			if (fat[fat_index] == FAT_EOC) {
-				open_file.file->size = (i+1) * BLOCK_SIZE;
-				return ((i+1) * BLOCK_SIZE);
-			}
-		}
+	fat[fat_index] = fat_find_free(0);
+
+	for (int i = old_blk_count; i < new_blk_count; i++) {
 		fat_index = fat[fat_index];
+		fat[fat_index] = fat_find_free(fat_index);
+		if (fat[fat_index] == FAT_EOC) {
+			open_file.file->size = (i+1) * BLOCK_SIZE;
+			return ((i+1) * BLOCK_SIZE);
+		}
 	}
 
 	fat[fat_index] = FAT_EOC;
