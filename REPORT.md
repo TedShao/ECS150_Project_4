@@ -99,16 +99,16 @@ stdout.
 
 This function first checks for a valid filename or if the filename already
 exists. Then it checks for space in the root directory as well as in the FAT.
-Then it initializes the memory to 0 using memset, and copies the filename and
-start index into the root directory. At the end it sets the next FAT index to 
-FAT_EOC
+Then it initializes the memory for the entry to 0 using memset, and copies the
+filename and start index into the root directory. At the end it sets the next
+FAT index to FAT_EOC
 
 ## fs_delete()
 
 This function checks for a valid filename, if the file is open, and finds it's
 index if the file exists. Then it delletes the file by looping through the FAT
-indexes and setting them to 0 till it hits FAT_EOC. Afterwards its sets all the
-files memory to 0 to signify that they are free.
+indexes and setting them to 0 till it hits FAT_EOC. Afterwards its sets the root
+directory entry memory to 0 to signify it is open for another file.
 
 ## fs_ls()
 
@@ -119,10 +119,11 @@ block to stdout.
 
 ## fs_open()
 
-This function first chcecks the number of open files, a valid filename, and if
-the file exists. Then it finds the first empty file index and uses that index to
-stores that file into an open_files array with an offset of 0. Then it
-increments the counter for the amount of open files.
+This function first checks the number of open files, a valid filename, and if
+the file exists. Then it increments the counter for the amount of open files. It
+then finds an open slot in the open_files array, sets the open_file.file to
+point to the corresponding file in the root directory and sets open_file.offset
+to 0. The function returns that index in open_files. 
 
 ## fs_close()
 
@@ -144,7 +145,39 @@ open files array based on the file descriptor.
 
 ## fs_read()
 
+First, the validity of file name is checked. After that, it checks to saturate
+the requested read count to the actual size of the file if needed. Using the
+file offset and count, we create a temporary buffer to hold the raw data from
+the requested blocks, since data from the disk is read in the granularity of
+blocks. We iterate through the FAT table jumping to the correct data block and
+adding it to our temporary buffer. Then we use the file offset and count to
+extract the correct data from the multiblock chunk and copy the data into the
+function argument buffer.
+
 ## fs_write()
+
+First, the validity of the file name is checked. After that, we check if the
+file needs to be extended in order to accommodate the extra data. If this is
+needed, we user our helper function to resize the file by modifying the size in
+the root directory and finding free fat indecies to hold more data. This helper
+function also returns the actual size of the file in the case that the disk ran
+out of room and could not resize to the requested size. The count requested by
+the function is then synced with actually data available to the file.
+
+Writing to the data blocks is broken up into 3 sections. We need to write to
+**n** blocks.
+
+The first section is reading the first data block into buffer. Modify only parts
+needed starting at the offset, then writing the modified block back to the disk.
+
+Blocks 2 to **n** - 1 are directly over written because none of the original block
+data will need to be saved.
+
+Block **n** like the first block, is read into a buffer. The data only up to
+where count specifies is modified. Data after that is left untouched. This
+buffer is then rewritten back to the disk.
+
+The function then returns the actual ammount of bytes written to the disk.
 
 # Testing
 
