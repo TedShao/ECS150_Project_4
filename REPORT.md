@@ -97,21 +97,48 @@ stdout.
 
 ## fs_create()
 
-
+This function first checks for a valid filename or if the filename already
+exists. Then it checks for space in the root directory as well as in the FAT.
+Then it initializes the memory to 0 using memset, and copies the filename and
+start index into the root directory. At the end it sets the next FAT index to 
+FAT_EOC
 
 ## fs_delete()
 
+This function checks for a valid filename, if the file is open, and finds it's
+index if the file exists. Then it delletes the file by looping through the FAT
+indexes and setting them to 0 till it hits FAT_EOC. Afterwards its sets all the
+files memory to 0 to signify that they are free.
+
 ## fs_ls()
+
+This function prints out the files in the filesystem with their size and data 
+block to stdout.
 
 # Phase 3
 
 ## fs_open()
 
+This function first chcecks the number of open files, a valid filename, and if
+the file exists. Then it finds the first empty file index and uses that index to
+stores that file into an open_files array with an offset of 0. Then it
+increments the counter for the amount of open files.
+
 ## fs_close()
+
+This function first checks if the file descriptor is valid. Then it closes the 
+file by removing it from the open files array and decrements the open file
+counter. 
 
 ## fs_lseek()
 
+This function checks for a valid file descriptor and if the offset is within the
+file bounds. Then it sets the file's offset to the given offset argument.
+
 ## fs_stat()
+
+The function returns the file size by returning the size of the file inside the
+open files array based on the file descriptor.
 
 # Phase 4
 
