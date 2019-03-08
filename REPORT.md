@@ -99,16 +99,16 @@ stdout.
 
 This function first checks for a valid filename or if the filename already
 exists. Then it checks for space in the root directory as well as in the FAT.
-Then it initializes the memory to 0 using memset, and copies the filename and
-start index into the root directory. At the end it sets the next FAT index to 
-FAT_EOC
+Then it initializes the memory for the entry to 0 using memset, and copies the
+filename and start index into the root directory. At the end it sets the next
+FAT index to FAT_EOC
 
 ## fs_delete()
 
 This function checks for a valid filename, if the file is open, and finds it's
 index if the file exists. Then it delletes the file by looping through the FAT
-indexes and setting them to 0 till it hits FAT_EOC. Afterwards its sets all the
-files memory to 0 to signify that they are free.
+indexes and setting them to 0 till it hits FAT_EOC. Afterwards its sets the root
+directory entry memory to 0 to signify it is open for another file.
 
 ## fs_ls()
 
@@ -119,10 +119,11 @@ block to stdout.
 
 ## fs_open()
 
-This function first chcecks the number of open files, a valid filename, and if
-the file exists. Then it finds the first empty file index and uses that index to
-stores that file into an open_files array with an offset of 0. Then it
-increments the counter for the amount of open files.
+This function first checks the number of open files, a valid filename, and if
+the file exists. Then it increments the counter for the amount of open files. It
+then finds an open slot in the open_files array, sets the open_file.file to
+point to the corresponding file in the root directory and sets open_file.offset
+to 0. The function returns that index in open_files. 
 
 ## fs_close()
 
@@ -143,6 +144,13 @@ open files array based on the file descriptor.
 # Phase 4
 
 ## fs_read()
+
+First, the validity of file name is checked. After that, it checks to saturate
+the requested read count to the actual size of the file if needed. Using the
+file offset and count, we create a temporary buffer to hold the raw data from
+the requested blocks, since data from the disk is read in the granularity of
+blocks. Then we use the file offset and count to extract the correct data from
+the multiblock chunk and copy into the function argument buffer.
 
 ## fs_write()
 
