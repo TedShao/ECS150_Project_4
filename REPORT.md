@@ -149,10 +149,35 @@ First, the validity of file name is checked. After that, it checks to saturate
 the requested read count to the actual size of the file if needed. Using the
 file offset and count, we create a temporary buffer to hold the raw data from
 the requested blocks, since data from the disk is read in the granularity of
-blocks. Then we use the file offset and count to extract the correct data from
-the multiblock chunk and copy into the function argument buffer.
+blocks. We iterate through the FAT table jumping to the correct data block and
+adding it to our temporary buffer. Then we use the file offset and count to
+extract the correct data from the multiblock chunk and copy the data into the
+function argument buffer.
 
 ## fs_write()
+
+First, the validity of the file name is checked. After that, we check if the
+file needs to be extended in order to accommodate the extra data. If this is
+needed, we user our helper function to resize the file by modifying the size in
+the root directory and finding free fat indecies to hold more data. This helper
+function also returns the actual size of the file in the case that the disk ran
+out of room and could not resize to the requested size. The count requested by
+the function is then synced with actually data available to the file.
+
+Writing to the data blocks is broken up into 3 sections. We need to write to
+**n** blocks.
+
+The first section is reading the first data block into buffer. Modify only parts
+needed starting at the offset, then writing the modified block back to the disk.
+
+Blocks 2 to **n** - 1 are directly over written because none of the original block
+data will need to be saved.
+
+Block **n** like the first block, is read into a buffer. The data only up to
+where count specifies is modified. Data after that is left untouched. This
+buffer is then rewritten back to the disk.
+
+The function then returns the actual ammount of bytes written to the disk.
 
 # Testing
 
